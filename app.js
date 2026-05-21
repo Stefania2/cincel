@@ -16,9 +16,27 @@ const notifyButton = document.getElementById("notifyButton");
 const refreshButton = document.getElementById("refreshButton");
 const exportExcelButton = document.getElementById("exportExcelButton");
 const exportPdfButton = document.getElementById("exportPdfButton");
+const API_BASE = resolveApiBase();
 
 const today = new Date().toISOString().split("T")[0];
 document.getElementById("sessionDate").value = today;
+
+function resolveApiBase() {
+    if (window.CINCEL_API_BASE) {
+        return window.CINCEL_API_BASE.replace(/\/$/, "");
+    }
+
+    const { protocol, hostname } = window.location;
+    if (protocol === "file:" || hostname === "127.0.0.1" || hostname === "localhost") {
+        return "";
+    }
+
+    if (hostname.endsWith("github.io")) {
+        return "https://cincel.onrender.com";
+    }
+
+    return "";
+}
 
 function showMessage(elementId, text, type = "success") {
     const element = document.getElementById(elementId);
@@ -42,7 +60,7 @@ function getStatusClass(status) {
 }
 
 async function request(path, options = {}) {
-    const response = await fetch(path, {
+    const response = await fetch(`${API_BASE}${path}`, {
         headers: {
             "Content-Type": "application/json",
             ...(options.headers || {}),
@@ -260,7 +278,7 @@ function openExport(format) {
     }
 
     clearMessage("notifyMessage");
-    window.open(`/api/students/${state.selectedStudentId}/export/${format}`, "_blank");
+    window.open(`${API_BASE}/api/students/${state.selectedStudentId}/export/${format}`, "_blank");
 }
 
 exportExcelButton.addEventListener("click", () => {

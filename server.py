@@ -14,10 +14,28 @@ BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR))
 DB_PATH = DATA_DIR / "cincel_academico.db"
 STATIC_FILES = {
-    "/": ("main.html", "text/html; charset=utf-8"),
+    "/": ("index.html", "text/html; charset=utf-8"),
+    "/index.html": ("index.html", "text/html; charset=utf-8"),
     "/main.html": ("main.html", "text/html; charset=utf-8"),
     "/app.js": ("app.js", "application/javascript; charset=utf-8"),
 }
+
+
+def allowed_origins():
+    configured = os.environ.get(
+        "CORS_ALLOWED_ORIGINS",
+        "http://127.0.0.1:8000,http://localhost:8000,https://stefania2.github.io",
+    )
+    return {origin.strip() for origin in configured.split(",") if origin.strip()}
+
+
+def apply_cors_headers(handler):
+    origin = handler.headers.get("Origin")
+    if origin and origin in allowed_origins():
+        handler.send_header("Access-Control-Allow-Origin", origin)
+        handler.send_header("Vary", "Origin")
+        handler.send_header("Access-Control-Allow-Headers", "Content-Type")
+        handler.send_header("Access-Control-Allow-Methods", "GET, POST, DELETE, OPTIONS")
 
 
 def get_connection():
@@ -61,6 +79,7 @@ def init_db():
 def json_response(handler, payload, status=HTTPStatus.OK):
     body = json.dumps(payload, ensure_ascii=False).encode("utf-8")
     handler.send_response(status)
+    apply_cors_headers(handler)
     handler.send_header("Content-Type", "application/json; charset=utf-8")
     handler.send_header("Content-Length", str(len(body)))
     handler.end_headers()
@@ -69,6 +88,7 @@ def json_response(handler, payload, status=HTTPStatus.OK):
 
 def download_response(handler, body, content_type, filename):
     handler.send_response(HTTPStatus.OK)
+    apply_cors_headers(handler)
     handler.send_header("Content-Type", content_type)
     handler.send_header("Content-Disposition", f'attachment; filename="{filename}"')
     handler.send_header("Content-Length", str(len(body)))
@@ -472,6 +492,11 @@ def send_whatsapp_message(to_number, body):
 
 class CincelHandler(BaseHTTPRequestHandler):
     server_version = "CincelPro/1.0"
+
+    def do_OPTIONS(self):
+        self.send_response(HTTPStatus.NO_CONTENT)
+        apply_cors_headers(self)
+        self.end_headers()
 
     def do_GET(self):
         parsed = parse.urlparse(self.path)
