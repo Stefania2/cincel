@@ -1,25 +1,27 @@
 const state = {
     students: [],
     selectedStudentId: null,
+    currentSheet: null,
 };
 
 const studentForm = document.getElementById("studentForm");
-const recordForm = document.getElementById("recordForm");
+const sheetForm = document.getElementById("sheetForm");
 const summaryStudentSelect = document.getElementById("summaryStudentSelect");
-const recordStudentId = document.getElementById("recordStudentId");
+const sheetStudentSelect = document.getElementById("sheetStudentSelect");
 const studentsTable = document.getElementById("studentsTable");
 const studentsEmpty = document.getElementById("studentsEmpty");
-const recordsTable = document.getElementById("recordsTable");
-const recordsEmpty = document.getElementById("recordsEmpty");
 const summaryContent = document.getElementById("summaryContent");
 const notifyButton = document.getElementById("notifyButton");
 const refreshButton = document.getElementById("refreshButton");
 const exportExcelButton = document.getElementById("exportExcelButton");
 const exportPdfButton = document.getElementById("exportPdfButton");
+const saveSheetButton = document.getElementById("saveSheetButton");
+const resetSheetButton = document.getElementById("resetSheetButton");
+const sheetTableBody = document.getElementById("sheetTableBody");
+const activeStudentName = document.getElementById("activeStudentName");
 const API_BASE = resolveApiBase();
-
-const today = new Date().toISOString().split("T")[0];
-document.getElementById("sessionDate").value = today;
+const TOTAL_ROWS = 20;
+const NOTE_COLUMNS = 10;
 
 function resolveApiBase() {
     if (window.CINCEL_API_BASE) {
@@ -59,6 +61,48 @@ function getStatusClass(status) {
     return "status-sin-registros";
 }
 
+function currentMonthText() {
+    return String(new Date().getMonth() + 1).padStart(2, "0");
+}
+
+function currentYearText() {
+    return String(new Date().getFullYear());
+}
+
+function createBlankRow(rowNumber) {
+    const row = {
+        row_number: rowNumber,
+        class_date: "",
+        start_time: "",
+        end_time: "",
+        total_pages: "",
+        partial_pages: "",
+        material_code: "",
+        material_level: "",
+    };
+
+    for (let index = 1; index <= NOTE_COLUMNS; index += 1) {
+        row[`note_${index}`] = "";
+    }
+
+    return row;
+}
+
+function createBlankSheet() {
+    return {
+        sheet: {
+            month: currentMonthText(),
+            year: currentYearText(),
+            unit_title: "T. Unidad",
+            home_title: "T. Casa",
+            used_sheets: "",
+            monthly_goal: "",
+            actual_progress: "",
+        },
+        rows: Array.from({ length: TOTAL_ROWS }, (_, index) => createBlankRow(index + 1)),
+    };
+}
+
 async function request(path, options = {}) {
     const response = await fetch(`${API_BASE}${path}`, {
         headers: {
@@ -85,7 +129,7 @@ function renderStudentOptions() {
         .join("");
 
     summaryStudentSelect.innerHTML = baseOption + options;
-    recordStudentId.innerHTML = baseOption + options;
+    sheetStudentSelect.innerHTML = baseOption + options;
 
     if (!state.students.length) {
         state.selectedStudentId = null;
@@ -98,7 +142,7 @@ function renderStudentOptions() {
     }
 
     summaryStudentSelect.value = state.selectedStudentId;
-    recordStudentId.value = state.selectedStudentId;
+    sheetStudentSelect.value = state.selectedStudentId;
 }
 
 function renderStudentsTable() {
@@ -113,7 +157,7 @@ function renderStudentsTable() {
             <td>${student.subject}<br><span class="subtle">${student.institution || "Institucion no registrada"}</span></td>
             <td>${student.whatsapp}</td>
             <td class="actions-cell">
-                <button class="secondary" type="button" data-select="${student.id}">Ver seguimiento</button>
+                <button class="secondary" type="button" data-open-sheet="${student.id}">Abrir hoja</button>
                 <button class="primary" type="button" data-notify="${student.id}">WhatsApp</button>
                 <button class="danger" type="button" data-delete-student="${student.id}">Eliminar</button>
             </td>
@@ -124,48 +168,103 @@ function renderStudentsTable() {
 
 function renderSummary(summary) {
     if (!summary) {
-        summaryContent.innerHTML = "Selecciona un estudiante para ver su seguimiento academico.";
+        summaryContent.innerHTML = "Selecciona un estudiante para abrir su hoja de registro.";
         document.getElementById("kpiAverage").textContent = "--";
-        document.getElementById("kpiAttendance").textContent = "--";
-        document.getElementById("kpiSessions").textContent = "--";
+        document.getElementById("kpiRows").textContent = "--";
+        document.getElementById("kpiA").textContent = "--";
+        document.getElementById("kpiSheets").textContent = "--";
         document.getElementById("statusPillHolder").innerHTML = "";
         return;
     }
 
-    document.getElementById("kpiAverage").textContent = summary.average_grade_text;
-    document.getElementById("kpiAttendance").textContent = summary.attendance_rate_text;
-    document.getElementById("kpiSessions").textContent = String(summary.total_sessions);
+    document.getElementById("kpiAverage").textContent = summary.average_numeric_text;
+    document.getElementById("kpiRows").textContent = String(summary.filled_rows);
+    document.getElementById("kpiA").textContent = String(summary.a_count);
+    document.getElementById("kpiSheets").textContent = summary.used_sheets_text;
     document.getElementById("statusPillHolder").innerHTML =
         `<span class="status-pill ${getStatusClass(summary.status)}">${summary.status}</span>`;
 
     summaryContent.innerHTML = `
         <h3>${summary.student.name}</h3>
-        <p class="subtle"><strong>Acudiente:</strong> ${summary.student.parent_name} | <strong>Materia:</strong> ${summary.student.subject}</p>
-        <p><strong>Estado actual:</strong> ${summary.status}</p>
-        <p><strong>Ultima observacion:</strong> ${summary.latest_observation || "Sin observaciones registradas."}</p>
+        <p class="subtle"><strong>Acudiente:</strong> ${summary.student.parent_name} | <strong>Programa:</strong> ${summary.student.subject}</p>
+        <p><strong>Hoja activa:</strong> ${summary.sheet.month || "--"}/${summary.sheet.year || "--"}</p>
+        <p><strong>Ultima fecha diligenciada:</strong> ${summary.last_record_date || "Sin registros"}</p>
+        <p><strong>Meta del mes:</strong> ${summary.sheet.monthly_goal || "Sin definir"} | <strong>Real:</strong> ${summary.sheet.actual_progress || "Sin definir"}</p>
         <p><strong>Recomendacion:</strong> ${summary.recommendation}</p>
     `;
 }
 
-function renderRecords(records) {
-    recordsTable.innerHTML = "";
-    recordsEmpty.style.display = records.length ? "none" : "block";
+function fillSheetMetadata(sheet) {
+    document.getElementById("sheetMonth").value = sheet.sheet.month || "";
+    document.getElementById("sheetYear").value = sheet.sheet.year || "";
+    document.getElementById("unitTitle").value = sheet.sheet.unit_title || "";
+    document.getElementById("homeTitle").value = sheet.sheet.home_title || "";
+    document.getElementById("usedSheets").value = sheet.sheet.used_sheets || "";
+    document.getElementById("monthlyGoal").value = sheet.sheet.monthly_goal || "";
+    document.getElementById("actualProgress").value = sheet.sheet.actual_progress || "";
+}
 
-    records.forEach((record) => {
-        const row = document.createElement("tr");
-        row.innerHTML = `
-            <td>${record.session_date}</td>
-            <td>${record.session_number || "-"}</td>
-            <td>${record.attendance}</td>
-            <td>${record.grade_text}</td>
-            <td>${record.topic || "-"}</td>
-            <td>${record.observation || "-"}</td>
-            <td class="actions-cell">
-                <button class="danger" type="button" data-delete-record="${record.id}">Eliminar</button>
-            </td>
+function renderSheetRows(rows) {
+    sheetTableBody.innerHTML = "";
+
+    rows.forEach((row) => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `
+            <td class="label-col">${row.row_number}</td>
+            <td class="medium-col"><input data-row="${row.row_number}" data-field="class_date" value="${row.class_date || ""}" placeholder="21"></td>
+            <td class="small-col"><input data-row="${row.row_number}" data-field="start_time" value="${row.start_time || ""}" placeholder="9:27"></td>
+            <td class="small-col"><input data-row="${row.row_number}" data-field="end_time" value="${row.end_time || ""}" placeholder="11:05"></td>
+            <td class="small-col"><input data-row="${row.row_number}" data-field="total_pages" value="${row.total_pages || ""}" placeholder="33"></td>
+            <td class="small-col"><input data-row="${row.row_number}" data-field="partial_pages" value="${row.partial_pages || ""}" placeholder="F"></td>
+            <td class="medium-col align-left"><input data-row="${row.row_number}" data-field="material_code" value="${row.material_code || ""}" placeholder="131"></td>
+            <td class="small-col"><input data-row="${row.row_number}" data-field="material_level" value="${row.material_level || ""}" placeholder="F"></td>
+            ${Array.from({ length: NOTE_COLUMNS }, (_, index) => {
+                const field = `note_${index + 1}`;
+                return `<td class="label-col"><input data-row="${row.row_number}" data-field="${field}" value="${row[field] || ""}" placeholder="A"></td>`;
+            }).join("")}
         `;
-        recordsTable.appendChild(row);
+        sheetTableBody.appendChild(tr);
     });
+}
+
+function renderSheet(sheet) {
+    state.currentSheet = sheet;
+    fillSheetMetadata(sheet);
+    renderSheetRows(sheet.rows);
+
+    const selectedStudent = state.students.find((student) => student.id === state.selectedStudentId);
+    activeStudentName.value = selectedStudent ? selectedStudent.name : "Sin seleccionar";
+    const disabled = !selectedStudent;
+    Array.from(sheetForm.querySelectorAll("input, button")).forEach((element) => {
+        if (element.id === "activeStudentName") return;
+        element.disabled = disabled;
+    });
+}
+
+function collectSheetPayload() {
+    const rows = [];
+
+    for (let rowNumber = 1; rowNumber <= TOTAL_ROWS; rowNumber += 1) {
+        const row = { row_number: rowNumber };
+        const selectors = sheetTableBody.querySelectorAll(`[data-row="${rowNumber}"]`);
+        selectors.forEach((input) => {
+            row[input.dataset.field] = input.value.trim();
+        });
+        rows.push(row);
+    }
+
+    return {
+        sheet: {
+            month: document.getElementById("sheetMonth").value.trim(),
+            year: document.getElementById("sheetYear").value.trim(),
+            unit_title: document.getElementById("unitTitle").value.trim(),
+            home_title: document.getElementById("homeTitle").value.trim(),
+            used_sheets: document.getElementById("usedSheets").value.trim(),
+            monthly_goal: document.getElementById("monthlyGoal").value.trim(),
+            actual_progress: document.getElementById("actualProgress").value.trim(),
+        },
+        rows,
+    };
 }
 
 async function loadStudents() {
@@ -179,17 +278,18 @@ async function loadStudents() {
 async function loadCurrentStudentData() {
     if (!state.selectedStudentId) {
         renderSummary(null);
-        renderRecords([]);
+        renderSheet(createBlankSheet());
+        activeStudentName.value = "Sin seleccionar";
         return;
     }
 
-    const [summaryData, recordsData] = await Promise.all([
+    const [summaryData, sheetData] = await Promise.all([
         request(`/api/students/${state.selectedStudentId}/summary`),
-        request(`/api/records?student_id=${encodeURIComponent(state.selectedStudentId)}`),
+        request(`/api/students/${state.selectedStudentId}/register-sheet`),
     ]);
 
     renderSummary(summaryData);
-    renderRecords(recordsData.records);
+    renderSheet(sheetData);
 }
 
 studentForm.addEventListener("submit", async (event) => {
@@ -203,6 +303,7 @@ studentForm.addEventListener("submit", async (event) => {
             body: JSON.stringify(payload),
         });
         studentForm.reset();
+        state.selectedStudentId = Number(result.student_id);
         showMessage("studentMessage", result.message);
         await loadStudents();
     } catch (error) {
@@ -210,37 +311,34 @@ studentForm.addEventListener("submit", async (event) => {
     }
 });
 
-recordForm.addEventListener("submit", async (event) => {
+sheetForm.addEventListener("submit", async (event) => {
     event.preventDefault();
-    clearMessage("recordMessage");
+    clearMessage("sheetMessage");
 
-    const payload = Object.fromEntries(new FormData(recordForm).entries());
-    payload.student_id = Number(payload.student_id);
-    payload.session_number = payload.session_number ? Number(payload.session_number) : null;
-    payload.grade = payload.grade ? Number(payload.grade) : null;
+    if (!state.selectedStudentId) {
+        showMessage("sheetMessage", "Primero selecciona un estudiante.", "error");
+        return;
+    }
 
     try {
-        const result = await request("/api/records", {
+        const result = await request(`/api/students/${state.selectedStudentId}/register-sheet`, {
             method: "POST",
-            body: JSON.stringify(payload),
+            body: JSON.stringify(collectSheetPayload()),
         });
-        recordForm.reset();
-        document.getElementById("sessionDate").value = today;
-        recordStudentId.value = state.selectedStudentId || "";
-        showMessage("recordMessage", result.message);
+        showMessage("sheetMessage", result.message);
         await loadCurrentStudentData();
     } catch (error) {
-        showMessage("recordMessage", error.message, "error");
+        showMessage("sheetMessage", error.message, "error");
     }
 });
 
 summaryStudentSelect.addEventListener("change", async (event) => {
     state.selectedStudentId = Number(event.target.value);
-    recordStudentId.value = event.target.value;
+    sheetStudentSelect.value = event.target.value;
     await loadCurrentStudentData();
 });
 
-recordStudentId.addEventListener("change", async (event) => {
+sheetStudentSelect.addEventListener("change", async (event) => {
     state.selectedStudentId = Number(event.target.value);
     summaryStudentSelect.value = event.target.value;
     await loadCurrentStudentData();
@@ -248,6 +346,7 @@ recordStudentId.addEventListener("change", async (event) => {
 
 refreshButton.addEventListener("click", async () => {
     clearMessage("notifyMessage");
+    clearMessage("sheetMessage");
     await loadCurrentStudentData();
 });
 
@@ -281,22 +380,25 @@ function openExport(format) {
     window.open(`${API_BASE}/api/students/${state.selectedStudentId}/export/${format}`, "_blank");
 }
 
-exportExcelButton.addEventListener("click", () => {
-    openExport("excel");
-});
+exportExcelButton.addEventListener("click", () => openExport("excel"));
+exportPdfButton.addEventListener("click", () => openExport("pdf"));
 
-exportPdfButton.addEventListener("click", () => {
-    openExport("pdf");
+resetSheetButton.addEventListener("click", () => {
+    const blank = createBlankSheet();
+    if (state.currentSheet?.sheet?.month) blank.sheet.month = state.currentSheet.sheet.month;
+    if (state.currentSheet?.sheet?.year) blank.sheet.year = state.currentSheet.sheet.year;
+    renderSheet(blank);
+    clearMessage("sheetMessage");
 });
 
 studentsTable.addEventListener("click", async (event) => {
     const button = event.target.closest("button");
     if (!button) return;
 
-    if (button.dataset.select) {
-        state.selectedStudentId = Number(button.dataset.select);
-        summaryStudentSelect.value = button.dataset.select;
-        recordStudentId.value = button.dataset.select;
+    if (button.dataset.openSheet) {
+        state.selectedStudentId = Number(button.dataset.openSheet);
+        summaryStudentSelect.value = button.dataset.openSheet;
+        sheetStudentSelect.value = button.dataset.openSheet;
         await loadCurrentStudentData();
         return;
     }
@@ -304,14 +406,14 @@ studentsTable.addEventListener("click", async (event) => {
     if (button.dataset.notify) {
         state.selectedStudentId = Number(button.dataset.notify);
         summaryStudentSelect.value = button.dataset.notify;
-        recordStudentId.value = button.dataset.notify;
+        sheetStudentSelect.value = button.dataset.notify;
         await loadCurrentStudentData();
         notifyButton.click();
         return;
     }
 
     if (button.dataset.deleteStudent) {
-        const confirmed = window.confirm("Se eliminara el estudiante y todo su seguimiento. Deseas continuar?");
+        const confirmed = window.confirm("Se eliminara el estudiante y toda su hoja de registro. Deseas continuar?");
         if (!confirmed) return;
 
         try {
@@ -320,21 +422,6 @@ studentsTable.addEventListener("click", async (event) => {
         } catch (error) {
             showMessage("studentMessage", error.message, "error");
         }
-    }
-});
-
-recordsTable.addEventListener("click", async (event) => {
-    const button = event.target.closest("button");
-    if (!button || !button.dataset.deleteRecord) return;
-
-    const confirmed = window.confirm("Se eliminara este registro academico. Deseas continuar?");
-    if (!confirmed) return;
-
-    try {
-        await request(`/api/records/${button.dataset.deleteRecord}`, { method: "DELETE" });
-        await loadCurrentStudentData();
-    } catch (error) {
-        showMessage("recordMessage", error.message, "error");
     }
 });
 

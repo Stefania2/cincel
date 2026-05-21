@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Cincel Pro | Seguimiento Academico</title>
+<title>Kumon | Hoja de Registro</title>
 <style>
 :root {
     --bg: #eef3f7;
@@ -32,8 +32,8 @@ body {
 }
 
 .page {
-    width: min(1200px, calc(100% - 32px));
-    margin: 24px auto 40px;
+    width: min(1480px, calc(100% - 28px));
+    margin: 20px auto 40px;
 }
 
 .hero {
@@ -44,8 +44,17 @@ body {
     box-shadow: var(--shadow);
 }
 
-.hero h1 { margin: 0 0 8px; font-size: clamp(2rem, 4vw, 3rem); }
-.hero p { margin: 0; max-width: 760px; line-height: 1.5; color: rgba(255, 255, 255, 0.92); }
+.hero h1 {
+    margin: 0 0 8px;
+    font-size: clamp(2rem, 4vw, 3.1rem);
+}
+
+.hero p {
+    margin: 0;
+    max-width: 900px;
+    line-height: 1.5;
+    color: rgba(255, 255, 255, 0.92);
+}
 
 .grid {
     display: grid;
@@ -72,23 +81,45 @@ body {
     gap: 12px;
 }
 
-.form-grid.three { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.form-grid.three {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+}
 
-.field { display: flex; flex-direction: column; gap: 6px; }
+.form-grid.four {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+}
+
+.field {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+}
+
 .field.full { grid-column: 1 / -1; }
-label { font-size: 0.92rem; color: var(--muted); font-weight: 600; }
-input, select, textarea, button { font: inherit; }
+
+label {
+    font-size: 0.92rem;
+    color: var(--muted);
+    font-weight: 600;
+}
+
+input, select, textarea, button {
+    font: inherit;
+}
 
 input, select, textarea {
     width: 100%;
     border: 1px solid var(--border);
     border-radius: 14px;
-    padding: 12px 14px;
+    padding: 11px 12px;
     background: white;
     color: var(--text);
 }
 
-textarea { min-height: 96px; resize: vertical; }
+textarea {
+    min-height: 96px;
+    resize: vertical;
+}
 
 .actions {
     display: flex;
@@ -104,10 +135,48 @@ button {
     cursor: pointer;
 }
 
-button:disabled { cursor: not-allowed; opacity: 0.6; }
+button:disabled {
+    cursor: not-allowed;
+    opacity: 0.6;
+}
+
 .primary { background: var(--primary); color: white; }
 .secondary { background: #ddebf0; color: var(--primary-dark); }
 .danger { background: rgba(192, 57, 43, 0.12); color: var(--danger); }
+
+.summary-box {
+    margin-top: 18px;
+    background: #fffdf7;
+    border: 1px dashed rgba(243, 167, 18, 0.55);
+    border-radius: 18px;
+    padding: 18px;
+}
+
+.kpis {
+    display: grid;
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+    gap: 12px;
+    margin-top: 18px;
+}
+
+.kpi {
+    background: #f6fbfd;
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    padding: 16px;
+}
+
+.kpi span {
+    display: block;
+    color: var(--muted);
+    font-size: 0.88rem;
+}
+
+.kpi strong {
+    display: block;
+    margin-top: 6px;
+    font-size: 1.45rem;
+}
 
 .status-pill {
     display: inline-flex;
@@ -125,32 +194,10 @@ button:disabled { cursor: not-allowed; opacity: 0.6; }
 .status-riesgo { color: #8f2318; background: rgba(192, 57, 43, 0.14); }
 .status-sin-registros { color: #5b7288; background: rgba(91, 114, 136, 0.14); }
 
-.kpis {
-    display: grid;
-    grid-template-columns: repeat(3, minmax(0, 1fr));
-    gap: 12px;
-    margin-top: 18px;
+.table-wrap {
+    overflow-x: auto;
+    margin-top: 14px;
 }
-
-.kpi {
-    background: #f6fbfd;
-    border: 1px solid var(--border);
-    border-radius: 18px;
-    padding: 16px;
-}
-
-.kpi span { display: block; color: var(--muted); font-size: 0.88rem; }
-.kpi strong { display: block; margin-top: 6px; font-size: 1.6rem; }
-
-.summary-box {
-    margin-top: 18px;
-    background: #fffdf7;
-    border: 1px dashed rgba(243, 167, 18, 0.55);
-    border-radius: 18px;
-    padding: 18px;
-}
-
-.table-wrap { overflow-x: auto; margin-top: 14px; }
 
 table {
     width: 100%;
@@ -172,7 +219,65 @@ th {
     letter-spacing: 0.05em;
 }
 
-td.actions-cell { display: flex; gap: 8px; flex-wrap: wrap; }
+td.actions-cell {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+
+.sheet-table {
+    min-width: 1650px;
+    table-layout: fixed;
+}
+
+.sheet-table th,
+.sheet-table td {
+    border: 1px solid var(--border);
+    padding: 6px;
+    text-align: center;
+}
+
+.sheet-table thead th {
+    position: sticky;
+    top: 0;
+    background: #eaf4f6;
+    z-index: 1;
+}
+
+.sheet-table td.label-col,
+.sheet-table th.label-col {
+    min-width: 58px;
+    width: 58px;
+}
+
+.sheet-table td.small-col,
+.sheet-table th.small-col {
+    min-width: 72px;
+    width: 72px;
+}
+
+.sheet-table td.medium-col,
+.sheet-table th.medium-col {
+    min-width: 104px;
+    width: 104px;
+}
+
+.sheet-table td.large-col,
+.sheet-table th.large-col {
+    min-width: 122px;
+    width: 122px;
+}
+
+.sheet-table input {
+    border-radius: 9px;
+    padding: 8px 8px;
+    min-width: 48px;
+    text-align: center;
+}
+
+.sheet-table .align-left input {
+    text-align: left;
+}
 
 .empty {
     padding: 18px;
@@ -193,16 +298,19 @@ td.actions-cell { display: flex; gap: 8px; flex-wrap: wrap; }
 .message.show { display: block; }
 .message.success { background: rgba(47, 133, 90, 0.12); color: #0c5a33; }
 .message.error { background: rgba(192, 57, 43, 0.12); color: #8f2318; }
-.caption { margin-top: 10px; color: var(--muted); font-size: 0.92rem; }
 
-@media (max-width: 940px) {
+.sheet-meta {
+    margin-top: 14px;
+}
+
+@media (max-width: 980px) {
     .grid { grid-template-columns: 1fr; }
 }
 
-@media (max-width: 640px) {
-    .page { width: min(100% - 20px, 1000px); margin-top: 10px; }
+@media (max-width: 720px) {
+    .page { width: min(100% - 16px, 1000px); }
     .panel, .hero { border-radius: 18px; padding: 18px; }
-    .form-grid, .form-grid.three, .kpis { grid-template-columns: 1fr; }
+    .form-grid, .form-grid.three, .form-grid.four, .kpis { grid-template-columns: 1fr; }
 }
 </style>
 </head>
@@ -210,7 +318,7 @@ td.actions-cell { display: flex; gap: 8px; flex-wrap: wrap; }
 <main class="page">
     <section class="hero">
         <h1>Kumon</h1>
-        <p>Registra estudiantes, asistencia, notas y observaciones en un formato digital inspirado en la hoja de seguimiento academico. El estado actual se calcula automaticamente y puede enviarse por WhatsApp al acudiente.</p>
+        <p>Crea estudiantes y diligencia una hoja de registro digital como la del formato fisico: fecha, horario, material, nivel y diez casillas de nota por fila. Cada estudiante tendra su propia planilla editable.</p>
     </section>
 
     <section class="grid">
@@ -232,7 +340,7 @@ td.actions-cell { display: flex; gap: 8px; flex-wrap: wrap; }
                         <input id="whatsapp" name="whatsapp" placeholder="Ej: +573001234567" required>
                     </div>
                     <div class="field">
-                        <label for="subject">Materia</label>
+                        <label for="subject">Programa o materia</label>
                         <select id="subject" name="subject" required>
                             <option value="Matematicas">Matematicas</option>
                             <option value="Ingles">Ingles</option>
@@ -257,15 +365,34 @@ td.actions-cell { display: flex; gap: 8px; flex-wrap: wrap; }
         </article>
 
         <article class="panel">
-            <h2>Estado Academico</h2>
-            <p class="subtle">Selecciona un estudiante para ver el resumen actual y preparar el mensaje de seguimiento.</p>
+            <h2>Resumen del Registro</h2>
+            <p class="subtle">Selecciona un estudiante para abrir su hoja y ver el estado general del registro.</p>
             <div class="field">
                 <label for="summaryStudentSelect">Estudiante</label>
                 <select id="summaryStudentSelect"></select>
             </div>
             <div id="summaryContent" class="summary-box">
-                Selecciona un estudiante para ver su seguimiento academico.
+                Selecciona un estudiante para abrir su hoja de registro.
             </div>
+            <div class="kpis">
+                <div class="kpi">
+                    <span>Promedio numerico</span>
+                    <strong id="kpiAverage">--</strong>
+                </div>
+                <div class="kpi">
+                    <span>Filas diligenciadas</span>
+                    <strong id="kpiRows">--</strong>
+                </div>
+                <div class="kpi">
+                    <span>Casillas A</span>
+                    <strong id="kpiA">--</strong>
+                </div>
+                <div class="kpi">
+                    <span>Hojas usadas</span>
+                    <strong id="kpiSheets">--</strong>
+                </div>
+            </div>
+            <div id="statusPillHolder" class="actions"></div>
             <div class="actions">
                 <button id="notifyButton" class="primary" type="button">Enviar estado por WhatsApp</button>
                 <button id="refreshButton" class="secondary" type="button">Actualizar resumen</button>
@@ -273,75 +400,6 @@ td.actions-cell { display: flex; gap: 8px; flex-wrap: wrap; }
                 <button id="exportPdfButton" class="secondary" type="button">Exportar PDF</button>
             </div>
             <div id="notifyMessage" class="message"></div>
-        </article>
-    </section>
-
-    <section class="grid">
-        <article class="panel">
-            <h2>Registro de Clase</h2>
-            <p class="subtle">Digitaliza la hoja de registro: fecha, sesion, asistencia, nota y observaciones.</p>
-            <form id="recordForm">
-                <div class="form-grid three">
-                    <div class="field">
-                        <label for="recordStudentId">Estudiante</label>
-                        <select id="recordStudentId" name="student_id" required></select>
-                    </div>
-                    <div class="field">
-                        <label for="sessionDate">Fecha</label>
-                        <input id="sessionDate" name="session_date" type="date" required>
-                    </div>
-                    <div class="field">
-                        <label for="sessionNumber">Sesion</label>
-                        <input id="sessionNumber" name="session_number" type="number" min="1" placeholder="Ej: 12">
-                    </div>
-                    <div class="field">
-                        <label for="attendance">Asistencia</label>
-                        <select id="attendance" name="attendance" required>
-                            <option value="Asistio">Asistio</option>
-                            <option value="Tarde">Tarde</option>
-                            <option value="No asistio">No asistio</option>
-                            <option value="Excusa">Excusa</option>
-                        </select>
-                    </div>
-                    <div class="field">
-                        <label for="grade">Nota</label>
-                        <input id="grade" name="grade" type="number" min="0" max="100" step="0.1" placeholder="0 - 100">
-                    </div>
-                    <div class="field">
-                        <label for="topic">Tema o actividad</label>
-                        <input id="topic" name="topic" placeholder="Ej: Fracciones equivalentes">
-                    </div>
-                    <div class="field full">
-                        <label for="observation">Observacion</label>
-                        <textarea id="observation" name="observation" placeholder="Describe avances, dificultades o compromisos."></textarea>
-                    </div>
-                </div>
-                <div class="actions">
-                    <button class="primary" type="submit">Registrar seguimiento</button>
-                </div>
-            </form>
-            <div id="recordMessage" class="message"></div>
-            <p class="caption">El servidor calcula promedio, asistencia y estado actual usando los registros guardados.</p>
-        </article>
-
-        <article class="panel alt">
-            <h2>Resumen Rapido</h2>
-            <p class="subtle">Vista resumida del estudiante seleccionado.</p>
-            <div class="kpis">
-                <div class="kpi">
-                    <span>Promedio</span>
-                    <strong id="kpiAverage">--</strong>
-                </div>
-                <div class="kpi">
-                    <span>Asistencia</span>
-                    <strong id="kpiAttendance">--</strong>
-                </div>
-                <div class="kpi">
-                    <span>Sesiones</span>
-                    <strong id="kpiSessions">--</strong>
-                </div>
-            </div>
-            <div id="statusPillHolder" class="actions"></div>
         </article>
     </section>
 
@@ -353,7 +411,7 @@ td.actions-cell { display: flex; gap: 8px; flex-wrap: wrap; }
                     <tr>
                         <th>Estudiante</th>
                         <th>Acudiente</th>
-                        <th>Materia</th>
+                        <th>Programa</th>
                         <th>WhatsApp</th>
                         <th>Acciones</th>
                     </tr>
@@ -365,25 +423,82 @@ td.actions-cell { display: flex; gap: 8px; flex-wrap: wrap; }
     </section>
 
     <section class="panel">
-        <h2>Seguimiento del Estudiante</h2>
-        <p class="subtle">Los registros se filtran por el estudiante seleccionado en el resumen.</p>
-        <div class="table-wrap">
-            <table>
-                <thead>
-                    <tr>
-                        <th>Fecha</th>
-                        <th>Sesion</th>
-                        <th>Asistencia</th>
-                        <th>Nota</th>
-                        <th>Tema</th>
-                        <th>Observacion</th>
-                        <th>Acciones</th>
-                    </tr>
-                </thead>
-                <tbody id="recordsTable"></tbody>
-            </table>
-        </div>
-        <div id="recordsEmpty" class="empty">No hay registros para el estudiante seleccionado.</div>
+        <h2>Hoja de Registro del Estudiante</h2>
+        <p class="subtle">Esta tabla reemplaza el formulario de sesion y nota. Puedes diligenciar la hoja por estudiante como en el formato fisico.</p>
+        <form id="sheetForm">
+            <div class="form-grid four sheet-meta">
+                <div class="field">
+                    <label for="sheetStudentSelect">Selecciona el estudiante</label>
+                    <select id="sheetStudentSelect"></select>
+                </div>
+                <div class="field">
+                    <label for="sheetMonth">Mes</label>
+                    <input id="sheetMonth" name="month" placeholder="Ej: 03">
+                </div>
+                <div class="field">
+                    <label for="sheetYear">Ano</label>
+                    <input id="sheetYear" name="year" placeholder="Ej: 2026">
+                </div>
+                <div class="field">
+                    <label for="unitTitle">T. Unidad</label>
+                    <input id="unitTitle" name="unit_title" placeholder="Ej: T. Unidad">
+                </div>
+                <div class="field">
+                    <label for="homeTitle">T. Casa</label>
+                    <input id="homeTitle" name="home_title" placeholder="Ej: T. Casa">
+                </div>
+                <div class="field">
+                    <label for="usedSheets">Hojas utilizadas por mes</label>
+                    <input id="usedSheets" name="used_sheets" placeholder="Ej: 130">
+                </div>
+                <div class="field">
+                    <label for="monthlyGoal">Meta del mes</label>
+                    <input id="monthlyGoal" name="monthly_goal" placeholder="Ej: F-161">
+                </div>
+                <div class="field">
+                    <label for="actualProgress">Real</label>
+                    <input id="actualProgress" name="actual_progress" placeholder="Ej: 116">
+                </div>
+                <div class="field">
+                    <label for="activeStudentName">Estudiante activo</label>
+                    <input id="activeStudentName" value="Sin seleccionar" disabled>
+                </div>
+            </div>
+
+            <div class="table-wrap">
+                <table class="sheet-table">
+                    <thead>
+                        <tr>
+                            <th class="label-col">Fila</th>
+                            <th class="medium-col">Fecha</th>
+                            <th class="small-col">Inicio</th>
+                            <th class="small-col">Fin</th>
+                            <th class="small-col">Tot.</th>
+                            <th class="small-col">Parc.</th>
+                            <th class="medium-col">Material</th>
+                            <th class="small-col">Nivel</th>
+                            <th class="label-col">1</th>
+                            <th class="label-col">2</th>
+                            <th class="label-col">3</th>
+                            <th class="label-col">4</th>
+                            <th class="label-col">5</th>
+                            <th class="label-col">6</th>
+                            <th class="label-col">7</th>
+                            <th class="label-col">8</th>
+                            <th class="label-col">9</th>
+                            <th class="label-col">10</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sheetTableBody"></tbody>
+                </table>
+            </div>
+
+            <div class="actions">
+                <button id="saveSheetButton" class="primary" type="submit">Guardar hoja</button>
+                <button id="resetSheetButton" class="secondary" type="button">Restablecer hoja</button>
+            </div>
+        </form>
+        <div id="sheetMessage" class="message"></div>
     </section>
 </main>
 

@@ -13,6 +13,8 @@ from urllib import error, parse, request
 BASE_DIR = Path(__file__).resolve().parent
 DATA_DIR = Path(os.environ.get("DATA_DIR", BASE_DIR))
 DB_PATH = DATA_DIR / "cincel_academico.db"
+TOTAL_ROWS = 20
+NOTE_FIELDS = [f"note_{index}" for index in range(1, 11)]
 STATIC_FILES = {
     "/": ("index.html", "text/html; charset=utf-8"),
     "/index.html": ("index.html", "text/html; charset=utf-8"),
@@ -42,6 +44,7 @@ def get_connection():
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     connection = sqlite3.connect(DB_PATH)
     connection.row_factory = sqlite3.Row
+    connection.execute("PRAGMA foreign_keys = ON")
     return connection
 
 
@@ -60,17 +63,43 @@ def init_db():
                 created_at TEXT NOT NULL
             );
 
-            CREATE TABLE IF NOT EXISTS academic_records (
+            CREATE TABLE IF NOT EXISTS register_sheets (
                 id INTEGER PRIMARY KEY AUTOINCREMENT,
-                student_id INTEGER NOT NULL,
-                session_date TEXT NOT NULL,
-                session_number INTEGER,
-                attendance TEXT NOT NULL,
-                grade REAL,
-                topic TEXT,
-                observation TEXT,
-                created_at TEXT NOT NULL,
+                student_id INTEGER NOT NULL UNIQUE,
+                month TEXT,
+                year TEXT,
+                unit_title TEXT,
+                home_title TEXT,
+                used_sheets TEXT,
+                monthly_goal TEXT,
+                actual_progress TEXT,
+                updated_at TEXT NOT NULL,
                 FOREIGN KEY(student_id) REFERENCES students(id) ON DELETE CASCADE
+            );
+
+            CREATE TABLE IF NOT EXISTS register_sheet_rows (
+                id INTEGER PRIMARY KEY AUTOINCREMENT,
+                sheet_id INTEGER NOT NULL,
+                row_number INTEGER NOT NULL,
+                class_date TEXT,
+                start_time TEXT,
+                end_time TEXT,
+                total_pages TEXT,
+                partial_pages TEXT,
+                material_code TEXT,
+                material_level TEXT,
+                note_1 TEXT,
+                note_2 TEXT,
+                note_3 TEXT,
+                note_4 TEXT,
+                note_5 TEXT,
+                note_6 TEXT,
+                note_7 TEXT,
+                note_8 TEXT,
+                note_9 TEXT,
+                note_10 TEXT,
+                FOREIGN KEY(sheet_id) REFERENCES register_sheets(id) ON DELETE CASCADE,
+                UNIQUE(sheet_id, row_number)
             );
             """
         )
@@ -109,16 +138,20 @@ def validate_whatsapp_number(number):
     return normalized
 
 
+def clean_text(value):
+    return (value or "").strip()
+
+
 def normalize_student(payload):
-    name = (payload.get("name") or "").strip()
-    parent_name = (payload.get("parent_name") or "").strip()
+    name = clean_text(payload.get("name"))
+    parent_name = clean_text(payload.get("parent_name"))
     whatsapp = validate_whatsapp_number(payload.get("whatsapp"))
-    subject = (payload.get("subject") or "").strip()
-    grade_level = (payload.get("grade_level") or "").strip()
-    institution = (payload.get("institution") or "").strip()
+    subject = clean_text(payload.get("subject"))
+    grade_level = clean_text(payload.get("grade_level"))
+    institution = clean_text(payload.get("institution"))
 
     if not name or not parent_name or not subject:
-        raise ValueError("Nombre del estudiante, acudiente y materia son obligatorios.")
+        raise ValueError("Nombre del estudiante, acudiente y programa son obligatorios.")
 
     return {
         "name": name,
@@ -131,51 +164,83 @@ def normalize_student(payload):
     }
 
 
-def normalize_record(payload):
-    student_id = payload.get("student_id")
-    session_date = (payload.get("session_date") or "").strip()
-    attendance = (payload.get("attendance") or "").strip()
-    topic = (payload.get("topic") or "").strip()
-    observation = (payload.get("observation") or "").strip()
-    session_number = payload.get("session_number")
-    grade = payload.get("grade")
-
-    if not student_id:
-        raise ValueError("Debes seleccionar un estudiante.")
-    if not session_date:
-        raise ValueError("La fecha del registro es obligatoria.")
-    if not attendance:
-        raise ValueError("La asistencia es obligatoria.")
-
-    try:
-        datetime.strptime(session_date, "%Y-%m-%d")
-    except ValueError as exc:
-        raise ValueError("La fecha debe tener formato AAAA-MM-DD.") from exc
-
-    if session_number in ("", None):
-        session_number = None
-    else:
-        session_number = int(session_number)
-        if session_number < 1:
-            raise ValueError("La sesion debe ser mayor o igual a 1.")
-
-    if grade in ("", None):
-        grade = None
-    else:
-        grade = float(grade)
-        if grade < 0 or grade > 100:
-            raise ValueError("La nota debe estar entre 0 y 100.")
-
+def default_sheet_metadata():
+    now = datetime.now()
     return {
-        "student_id": int(student_id),
-        "session_date": session_date,
-        "session_number": session_number,
-        "attendance": attendance,
-        "grade": grade,
-        "topic": topic,
-        "observation": observation,
-        "created_at": datetime.now().isoformat(timespec="seconds"),
+        "month": f"{now.month:02d}",
+        "year": str(now.year),
+        "unit_title": "T. Unidad",
+        "home_title": "T. Casa",
+        "used_sheets": "",
+        "monthly_goal": "",
+        "actual_progress": "",
     }
+
+
+def blank_row(row_number):
+    row = {
+        "row_number": row_number,
+        "class_date": "",
+        "start_time": "",
+        "end_time": "",
+        "total_pages": "",
+        "partial_pages": "",
+        "material_code": "",
+        "material_level": "",
+    }
+    for field in NOTE_FIELDS:
+        row[field] = ""
+    return row
+
+
+def default_sheet():
+    return {
+        "sheet": default_sheet_metadata(),
+        "rows": [blank_row(index) for index in range(1, TOTAL_ROWS + 1)],
+    }
+
+
+def normalize_sheet_payload(payload):
+    sheet_payload = payload.get("sheet") or {}
+    rows_payload = payload.get("rows") or []
+
+    sheet = {
+        "month": clean_text(sheet_payload.get("month")),
+        "year": clean_text(sheet_payload.get("year")),
+        "unit_title": clean_text(sheet_payload.get("unit_title")),
+        "home_title": clean_text(sheet_payload.get("home_title")),
+        "used_sheets": clean_text(sheet_payload.get("used_sheets")),
+        "monthly_goal": clean_text(sheet_payload.get("monthly_goal")),
+        "actual_progress": clean_text(sheet_payload.get("actual_progress")),
+    }
+
+    rows_by_number = {}
+    for row_payload in rows_payload:
+        try:
+            row_number = int(row_payload.get("row_number"))
+        except (TypeError, ValueError):
+            continue
+        if 1 <= row_number <= TOTAL_ROWS:
+            rows_by_number[row_number] = row_payload
+
+    rows = []
+    for row_number in range(1, TOTAL_ROWS + 1):
+        source = rows_by_number.get(row_number, {})
+        row = {
+            "row_number": row_number,
+            "class_date": clean_text(source.get("class_date")),
+            "start_time": clean_text(source.get("start_time")),
+            "end_time": clean_text(source.get("end_time")),
+            "total_pages": clean_text(source.get("total_pages")),
+            "partial_pages": clean_text(source.get("partial_pages")),
+            "material_code": clean_text(source.get("material_code")),
+            "material_level": clean_text(source.get("material_level")),
+        }
+        for field in NOTE_FIELDS:
+            row[field] = clean_text(source.get(field))
+        rows.append(row)
+
+    return {"sheet": sheet, "rows": rows}
 
 
 def fetch_students():
@@ -203,24 +268,136 @@ def fetch_student(student_id):
     return dict(row) if row else None
 
 
-def fetch_records(student_id):
+def row_has_content(row):
+    keys = [
+        "class_date",
+        "start_time",
+        "end_time",
+        "total_pages",
+        "partial_pages",
+        "material_code",
+        "material_level",
+        *NOTE_FIELDS,
+    ]
+    return any(clean_text(row.get(key)) for key in keys)
+
+
+def fetch_register_sheet(student_id):
     with get_connection() as connection:
-        rows = connection.execute(
+        sheet_row = connection.execute(
             """
-            SELECT id, student_id, session_date, session_number, attendance, grade, topic, observation, created_at
-            FROM academic_records
+            SELECT id, student_id, month, year, unit_title, home_title, used_sheets, monthly_goal, actual_progress, updated_at
+            FROM register_sheets
             WHERE student_id = ?
-            ORDER BY session_date DESC, COALESCE(session_number, 0) DESC, id DESC
             """,
             (student_id,),
+        ).fetchone()
+
+        if not sheet_row:
+            return default_sheet()
+
+        rows = connection.execute(
+            f"""
+            SELECT row_number, class_date, start_time, end_time, total_pages, partial_pages, material_code, material_level,
+                   {", ".join(NOTE_FIELDS)}
+            FROM register_sheet_rows
+            WHERE sheet_id = ?
+            ORDER BY row_number ASC
+            """,
+            (sheet_row["id"],),
         ).fetchall()
 
-    records = []
-    for row in rows:
-        record = dict(row)
-        record["grade_text"] = "-" if record["grade"] is None else f"{record['grade']:.1f}"
-        records.append(record)
-    return records
+    existing = {int(row["row_number"]): dict(row) for row in rows}
+    ordered_rows = []
+    for row_number in range(1, TOTAL_ROWS + 1):
+        ordered_rows.append(existing.get(row_number, blank_row(row_number)))
+
+    return {
+        "sheet": {
+            "month": sheet_row["month"] or "",
+            "year": sheet_row["year"] or "",
+            "unit_title": sheet_row["unit_title"] or "",
+            "home_title": sheet_row["home_title"] or "",
+            "used_sheets": sheet_row["used_sheets"] or "",
+            "monthly_goal": sheet_row["monthly_goal"] or "",
+            "actual_progress": sheet_row["actual_progress"] or "",
+        },
+        "rows": ordered_rows,
+    }
+
+
+def save_register_sheet(student_id, payload):
+    if not fetch_student(student_id):
+        raise ValueError("El estudiante no existe.")
+
+    normalized = normalize_sheet_payload(payload)
+    timestamp = datetime.now().isoformat(timespec="seconds")
+
+    with get_connection() as connection:
+        existing = connection.execute(
+            "SELECT id FROM register_sheets WHERE student_id = ?",
+            (student_id,),
+        ).fetchone()
+
+        if existing:
+            sheet_id = int(existing["id"])
+            connection.execute(
+                """
+                UPDATE register_sheets
+                SET month = :month,
+                    year = :year,
+                    unit_title = :unit_title,
+                    home_title = :home_title,
+                    used_sheets = :used_sheets,
+                    monthly_goal = :monthly_goal,
+                    actual_progress = :actual_progress,
+                    updated_at = :updated_at
+                WHERE id = :id
+                """,
+                {
+                    **normalized["sheet"],
+                    "updated_at": timestamp,
+                    "id": sheet_id,
+                },
+            )
+        else:
+            cursor = connection.execute(
+                """
+                INSERT INTO register_sheets (
+                    student_id, month, year, unit_title, home_title, used_sheets, monthly_goal, actual_progress, updated_at
+                ) VALUES (
+                    :student_id, :month, :year, :unit_title, :home_title, :used_sheets, :monthly_goal, :actual_progress, :updated_at
+                )
+                """,
+                {
+                    **normalized["sheet"],
+                    "student_id": student_id,
+                    "updated_at": timestamp,
+                },
+            )
+            sheet_id = cursor.lastrowid
+
+        connection.execute("DELETE FROM register_sheet_rows WHERE sheet_id = ?", (sheet_id,))
+        for row in normalized["rows"]:
+            connection.execute(
+                f"""
+                INSERT INTO register_sheet_rows (
+                    sheet_id, row_number, class_date, start_time, end_time, total_pages, partial_pages, material_code, material_level,
+                    {", ".join(NOTE_FIELDS)}
+                ) VALUES (
+                    :sheet_id, :row_number, :class_date, :start_time, :end_time, :total_pages, :partial_pages, :material_code, :material_level,
+                    {", ".join(f":{field}" for field in NOTE_FIELDS)}
+                )
+                """,
+                {"sheet_id": sheet_id, **row},
+            )
+
+
+def try_parse_number(value):
+    try:
+        return float(str(value).replace(",", "."))
+    except (TypeError, ValueError):
+        return None
 
 
 def calculate_summary(student_id):
@@ -228,48 +405,76 @@ def calculate_summary(student_id):
     if not student:
         return None
 
-    records = fetch_records(student_id)
-    total_sessions = len(records)
-    attendance_points = {
-        "Asistio": 1,
-        "Tarde": 0.75,
-        "Excusa": 0.5,
-        "No asistio": 0,
-    }
-    earned_attendance = sum(attendance_points.get(record["attendance"], 0) for record in records)
-    attendance_rate = (earned_attendance / total_sessions * 100) if total_sessions else 0
+    sheet_data = fetch_register_sheet(student_id)
+    rows = sheet_data["rows"]
+    filled_rows = sum(1 for row in rows if row_has_content(row))
+    numeric_notes = []
+    a_count = 0
+    s_count = 0
+    total_pages_sum = 0.0
+    last_record_date = ""
 
-    grades = [record["grade"] for record in records if record["grade"] is not None]
-    average_grade = (sum(grades) / len(grades)) if grades else None
-    latest_observation = next((record["observation"] for record in records if record["observation"]), "")
+    for row in rows:
+        if clean_text(row.get("class_date")):
+            last_record_date = row["class_date"]
 
-    if not records:
+        page_number = try_parse_number(row.get("total_pages"))
+        if page_number is not None:
+            total_pages_sum += page_number
+
+        for field in NOTE_FIELDS:
+            cell = clean_text(row.get(field))
+            if not cell:
+                continue
+
+            if cell.upper() == "A":
+                a_count += 1
+                continue
+
+            if cell.upper() == "S":
+                s_count += 1
+                continue
+
+            number = try_parse_number(cell)
+            if number is not None:
+                numeric_notes.append(number)
+
+    average_numeric = (sum(numeric_notes) / len(numeric_notes)) if numeric_notes else None
+    used_sheets_number = try_parse_number(sheet_data["sheet"].get("used_sheets"))
+    used_sheets_text = "--" if not sheet_data["sheet"].get("used_sheets") else sheet_data["sheet"]["used_sheets"]
+
+    if filled_rows == 0:
         status = "Sin registros"
-        recommendation = "Registra la primera sesion para empezar a medir el avance academico."
-    elif average_grade is None:
-        status = "Sin nota aun"
-        recommendation = "Registra una nota numerica para evaluar el rendimiento del estudiante."
-    elif average_grade >= 85 and attendance_rate >= 90:
+        recommendation = "Empieza a diligenciar la hoja del estudiante para tener seguimiento del mes."
+    elif average_numeric is None:
+        status = "En seguimiento"
+        recommendation = "La hoja tiene actividad registrada; agrega valores numericos si quieres medir promedio."
+    elif average_numeric >= 85:
         status = "Excelente"
-        recommendation = "Mantener la constancia y proponer retos de profundizacion."
-    elif average_grade >= 70 and attendance_rate >= 80:
+        recommendation = "Mantener el ritmo y seguir reforzando el trabajo independiente."
+    elif average_numeric >= 70:
         status = "Estable"
-        recommendation = "Continuar el plan actual y reforzar los temas donde aparezcan dudas."
-    elif average_grade >= 60 and attendance_rate >= 70:
+        recommendation = "Continuar el seguimiento y reforzar los puntos donde aparezcan repeticiones o correcciones."
+    elif average_numeric >= 60:
         status = "En observacion"
-        recommendation = "Reforzar temas basicos, aumentar practica guiada y monitorear de cerca la asistencia."
+        recommendation = "Conviene revisar con detalle el material y dedicar mas acompanamiento a los ejercicios clave."
     else:
         status = "Riesgo academico"
-        recommendation = "Programar plan de apoyo inmediato con seguimiento semanal y comunicacion permanente con el acudiente."
+        recommendation = "Se recomienda apoyo cercano, revision de rutina diaria y comunicacion continua con el acudiente."
 
     return {
         "student": student,
-        "total_sessions": total_sessions,
-        "attendance_rate": attendance_rate,
-        "attendance_rate_text": f"{attendance_rate:.1f}%",
-        "average_grade": average_grade,
-        "average_grade_text": "--" if average_grade is None else f"{average_grade:.1f}",
-        "latest_observation": latest_observation,
+        "sheet": sheet_data["sheet"],
+        "filled_rows": filled_rows,
+        "average_numeric": average_numeric,
+        "average_numeric_text": "--" if average_numeric is None else f"{average_numeric:.1f}",
+        "a_count": a_count,
+        "s_count": s_count,
+        "used_sheets_text": used_sheets_text,
+        "used_sheets_number": used_sheets_number,
+        "total_pages_sum": total_pages_sum,
+        "total_pages_sum_text": f"{total_pages_sum:.0f}" if total_pages_sum else "--",
+        "last_record_date": last_record_date,
         "status": status,
         "recommendation": recommendation,
     }
@@ -277,11 +482,13 @@ def calculate_summary(student_id):
 
 def build_whatsapp_message(summary):
     student = summary["student"]
+    sheet = summary["sheet"]
     return (
-        f"Hola {student['parent_name']}, te compartimos el estado academico actual de {student['name']} en "
-        f"{student['subject']}. Estado: {summary['status']}. Promedio: {summary['average_grade_text']}. "
-        f"Asistencia: {summary['attendance_rate_text']}. Sesiones registradas: {summary['total_sessions']}. "
-        f"Ultima observacion: {summary['latest_observation'] or 'Sin observaciones registradas.'} "
+        f"Hola {student['parent_name']}, te compartimos el estado actual de la hoja de registro de {student['name']} "
+        f"en {student['subject']}. Mes/Ano: {sheet.get('month') or '--'}/{sheet.get('year') or '--'}. "
+        f"Estado: {summary['status']}. Filas diligenciadas: {summary['filled_rows']}. "
+        f"Promedio numerico: {summary['average_numeric_text']}. Casillas A: {summary['a_count']}. "
+        f"Meta del mes: {sheet.get('monthly_goal') or 'Sin definir'}. Real: {sheet.get('actual_progress') or 'Sin definir'}. "
         f"Recomendacion: {summary['recommendation']}"
     )
 
@@ -292,50 +499,47 @@ def safe_filename(value):
     return cleaned or "estudiante"
 
 
-def build_excel_export(summary, records):
+def build_excel_export(summary, sheet_data):
     student = summary["student"]
+    sheet = sheet_data["sheet"]
+    rows = sheet_data["rows"]
 
     def cell(value, cell_type="String", style=""):
         style_attr = f' ss:StyleID="{style}"' if style else ""
         escaped = html.escape("" if value is None else str(value))
         return f'<Cell{style_attr}><Data ss:Type="{cell_type}">{escaped}</Data></Cell>'
 
-    rows = [
-        f"<Row>{cell('Reporte Academico', style='title')}</Row>",
+    lines = [
+        f"<Row>{cell('Hoja de Registro', style='title')}</Row>",
         f"<Row>{cell('Estudiante', style='label')}{cell(student['name'])}</Row>",
         f"<Row>{cell('Acudiente', style='label')}{cell(student['parent_name'])}</Row>",
-        f"<Row>{cell('Materia', style='label')}{cell(student['subject'])}</Row>",
-        f"<Row>{cell('WhatsApp', style='label')}{cell(student['whatsapp'])}</Row>",
-        f"<Row>{cell('Promedio', style='label')}{cell(summary['average_grade_text'])}</Row>",
-        f"<Row>{cell('Asistencia', style='label')}{cell(summary['attendance_rate_text'])}</Row>",
-        f"<Row>{cell('Estado', style='label')}{cell(summary['status'])}</Row>",
-        f"<Row>{cell('Recomendacion', style='label')}{cell(summary['recommendation'])}</Row>",
+        f"<Row>{cell('Programa', style='label')}{cell(student['subject'])}</Row>",
+        f"<Row>{cell('Mes', style='label')}{cell(sheet['month'])}{cell('Ano', style='label')}{cell(sheet['year'])}</Row>",
+        f"<Row>{cell('T. Unidad', style='label')}{cell(sheet['unit_title'])}{cell('T. Casa', style='label')}{cell(sheet['home_title'])}</Row>",
+        f"<Row>{cell('Hojas utilizadas', style='label')}{cell(sheet['used_sheets'])}{cell('Meta del mes', style='label')}{cell(sheet['monthly_goal'])}{cell('Real', style='label')}{cell(sheet['actual_progress'])}</Row>",
+        f"<Row>{cell('Estado', style='label')}{cell(summary['status'])}{cell('Promedio', style='label')}{cell(summary['average_numeric_text'])}</Row>",
         "<Row></Row>",
-        (
-            "<Row>"
-            f"{cell('Fecha', style='header')}"
-            f"{cell('Sesion', style='header')}"
-            f"{cell('Asistencia', style='header')}"
-            f"{cell('Nota', style='header')}"
-            f"{cell('Tema', style='header')}"
-            f"{cell('Observacion', style='header')}"
-            "</Row>"
-        ),
     ]
 
-    for record in records:
-        grade_type = "Number" if record["grade"] is not None else "String"
-        grade_value = record["grade"] if record["grade"] is not None else "-"
-        rows.append(
-            "<Row>"
-            f"{cell(record['session_date'])}"
-            f"{cell(record['session_number'] or '-')}"
-            f"{cell(record['attendance'])}"
-            f"{cell(grade_value, grade_type)}"
-            f"{cell(record['topic'] or '-')}"
-            f"{cell(record['observation'] or '-')}"
-            "</Row>"
-        )
+    header_cells = [
+        "Fila", "Fecha", "Inicio", "Fin", "Tot.", "Parc.", "Material", "Nivel",
+        *[str(index) for index in range(1, 11)],
+    ]
+    lines.append("<Row>" + "".join(cell(header, style="header") for header in header_cells) + "</Row>")
+
+    for row in rows:
+        line_cells = [
+            row["row_number"],
+            row["class_date"],
+            row["start_time"],
+            row["end_time"],
+            row["total_pages"],
+            row["partial_pages"],
+            row["material_code"],
+            row["material_level"],
+            *[row[field] for field in NOTE_FIELDS],
+        ]
+        lines.append("<Row>" + "".join(cell(value) for value in line_cells) + "</Row>")
 
     workbook = f"""<?xml version="1.0" encoding="UTF-8"?>
 <?mso-application progid="Excel.Sheet"?>
@@ -351,15 +555,10 @@ def build_excel_export(summary, records):
    <Interior ss:Color="#DDEBF0" ss:Pattern="Solid"/>
   </Style>
  </Styles>
- <Worksheet ss:Name="Seguimiento">
+ <Worksheet ss:Name="Registro">
   <Table>
-   <Column ss:Width="110"/>
-   <Column ss:Width="90"/>
-   <Column ss:Width="90"/>
-   <Column ss:Width="70"/>
-   <Column ss:Width="140"/>
-   <Column ss:Width="280"/>
-   {''.join(rows)}
+   {''.join(f'<Column ss:Width="{width}"/>' for width in [50, 85, 70, 70, 60, 60, 85, 55, 45, 45, 45, 45, 45, 45, 45, 45, 45, 45])}
+   {''.join(lines)}
   </Table>
  </Worksheet>
 </Workbook>"""
@@ -371,38 +570,39 @@ def pdf_escape(value):
     return sanitized.encode("latin-1", errors="replace").decode("latin-1")
 
 
-def build_pdf_export(summary, records):
+def build_pdf_export(summary, sheet_data):
     student = summary["student"]
+    sheet = sheet_data["sheet"]
+    rows = sheet_data["rows"]
+
     lines = [
-        "CINCEL PRO - REPORTE ACADEMICO",
+        "KUMON - HOJA DE REGISTRO",
         "",
         f"Estudiante: {student['name']}",
         f"Acudiente: {student['parent_name']}",
-        f"Materia: {student['subject']}",
-        f"WhatsApp: {student['whatsapp']}",
-        f"Promedio: {summary['average_grade_text']}",
-        f"Asistencia: {summary['attendance_rate_text']}",
-        f"Estado actual: {summary['status']}",
-        f"Recomendacion: {summary['recommendation']}",
+        f"Programa: {student['subject']}",
+        f"Mes/Ano: {sheet.get('month') or '--'}/{sheet.get('year') or '--'}",
+        f"T. Unidad: {sheet.get('unit_title') or '--'} | T. Casa: {sheet.get('home_title') or '--'}",
+        f"Meta del mes: {sheet.get('monthly_goal') or '--'} | Real: {sheet.get('actual_progress') or '--'}",
+        f"Estado: {summary['status']} | Promedio: {summary['average_numeric_text']} | Casillas A: {summary['a_count']}",
         "",
-        "REGISTROS",
+        "REGISTRO",
     ]
 
-    if not records:
-        lines.append("Sin registros academicos.")
-    else:
-        for record in records:
-            note = record["grade_text"]
-            topic = (record["topic"] or "-")[:32]
-            observation = (record["observation"] or "-")[:70]
-            lines.append(
-                f"{record['session_date']} | Sesion {record['session_number'] or '-'} | "
-                f"{record['attendance']} | Nota {note} | {topic}"
-            )
-            lines.append(f"Observacion: {observation}")
-            lines.append("")
+    for row in rows:
+        if not row_has_content(row):
+            continue
+        line = (
+            f"Fila {row['row_number']}: {row['class_date'] or '-'} {row['start_time'] or '-'}-{row['end_time'] or '-'} | "
+            f"Tot {row['total_pages'] or '-'} | Parc {row['partial_pages'] or '-'} | Mat {row['material_code'] or '-'} | "
+            f"Nivel {row['material_level'] or '-'} | Notas {' '.join((row[field] or '-') for field in NOTE_FIELDS)}"
+        )
+        lines.append(line[:180])
 
-    page_size = 38
+    if len(lines) == 11:
+        lines.append("Sin filas diligenciadas.")
+
+    page_size = 34
     pages = [lines[index:index + page_size] for index in range(0, len(lines), page_size)] or [[]]
     objects = []
 
@@ -414,8 +614,11 @@ def build_pdf_export(summary, records):
     page_ids = []
 
     for page_lines in pages:
-        text_lines = "\n".join(f"({pdf_escape(line)}) Tj" + ("\nT*" if i != len(page_lines) - 1 else "") for i, line in enumerate(page_lines))
-        stream = f"BT\n/F1 11 Tf\n50 790 Td\n14 TL\n{text_lines}\nET"
+        text_lines = "\n".join(
+            f"({pdf_escape(line)}) Tj" + ("\nT*" if index != len(page_lines) - 1 else "")
+            for index, line in enumerate(page_lines)
+        )
+        stream = f"BT\n/F1 10 Tf\n36 790 Td\n13 TL\n{text_lines}\nET"
         stream_bytes = stream.encode("latin-1", errors="replace")
         content_obj = add_object(f"<< /Length {len(stream_bytes)} >>\nstream\n{stream}\nendstream")
         page_obj = add_object(
@@ -491,7 +694,7 @@ def send_whatsapp_message(to_number, body):
 
 
 class CincelHandler(BaseHTTPRequestHandler):
-    server_version = "CincelPro/1.0"
+    server_version = "CincelPro/2.0"
 
     def do_OPTIONS(self):
         self.send_response(HTTPStatus.NO_CONTENT)
@@ -530,58 +733,60 @@ class CincelHandler(BaseHTTPRequestHandler):
             )
             return
 
-        if parsed.path == "/api/records":
-            query = parse.parse_qs(parsed.query)
-            student_id = query.get("student_id", [None])[0]
-            if not student_id:
-                json_response(self, {"error": "Debes indicar el estudiante."}, HTTPStatus.BAD_REQUEST)
+        if parsed.path.startswith("/api/students/") and parsed.path.endswith("/register-sheet"):
+            student_id = int(parsed.path.split("/")[3])
+            if not fetch_student(student_id):
+                json_response(self, {"error": "Estudiante no encontrado."}, HTTPStatus.NOT_FOUND)
                 return
-            json_response(self, {"records": fetch_records(int(student_id))})
-            return
-
-        if parsed.path.startswith("/api/students/") and "/export/" in parsed.path:
-            parts = parsed.path.split("/")
-            if len(parts) >= 6:
-                student_id = int(parts[3])
-                export_format = parts[5]
-                summary = calculate_summary(student_id)
-                if not summary:
-                    json_response(self, {"error": "Estudiante no encontrado."}, HTTPStatus.NOT_FOUND)
-                    return
-
-                records = fetch_records(student_id)
-                base_name = safe_filename(summary["student"]["name"])
-
-                if export_format == "excel":
-                    body = build_excel_export(summary, records)
-                    download_response(
-                        self,
-                        body,
-                        "application/vnd.ms-excel; charset=utf-8",
-                        f"seguimiento_{base_name}.xls",
-                    )
-                    return
-
-                if export_format == "pdf":
-                    body = build_pdf_export(summary, records)
-                    download_response(
-                        self,
-                        body,
-                        "application/pdf",
-                        f"seguimiento_{base_name}.pdf",
-                    )
-                    return
-
-            json_response(self, {"error": "Formato de exportacion no valido."}, HTTPStatus.BAD_REQUEST)
+            json_response(self, fetch_register_sheet(student_id))
             return
 
         if parsed.path.startswith("/api/students/") and parsed.path.endswith("/summary"):
-            student_id = parsed.path.split("/")[3]
-            summary = calculate_summary(int(student_id))
+            student_id = int(parsed.path.split("/")[3])
+            summary = calculate_summary(student_id)
             if not summary:
                 json_response(self, {"error": "Estudiante no encontrado."}, HTTPStatus.NOT_FOUND)
                 return
             json_response(self, summary)
+            return
+
+        if parsed.path.startswith("/api/students/") and "/export/" in parsed.path:
+            parts = parsed.path.split("/")
+            if len(parts) < 6:
+                json_response(self, {"error": "Formato de exportacion no valido."}, HTTPStatus.BAD_REQUEST)
+                return
+
+            student_id = int(parts[3])
+            export_format = parts[5]
+            summary = calculate_summary(student_id)
+            if not summary:
+                json_response(self, {"error": "Estudiante no encontrado."}, HTTPStatus.NOT_FOUND)
+                return
+
+            sheet_data = fetch_register_sheet(student_id)
+            base_name = safe_filename(summary["student"]["name"])
+
+            if export_format == "excel":
+                body = build_excel_export(summary, sheet_data)
+                download_response(
+                    self,
+                    body,
+                    "application/vnd.ms-excel; charset=utf-8",
+                    f"registro_{base_name}.xls",
+                )
+                return
+
+            if export_format == "pdf":
+                body = build_pdf_export(summary, sheet_data)
+                download_response(
+                    self,
+                    body,
+                    "application/pdf",
+                    f"registro_{base_name}.pdf",
+                )
+                return
+
+            json_response(self, {"error": "Formato de exportacion no valido."}, HTTPStatus.BAD_REQUEST)
             return
 
         self.send_error(HTTPStatus.NOT_FOUND, "Ruta no encontrada.")
@@ -609,27 +814,10 @@ class CincelHandler(BaseHTTPRequestHandler):
                 )
                 return
 
-            if parsed.path == "/api/records":
-                record = normalize_record(payload)
-                if not fetch_student(record["student_id"]):
-                    json_response(self, {"error": "El estudiante no existe."}, HTTPStatus.NOT_FOUND)
-                    return
-                with get_connection() as connection:
-                    cursor = connection.execute(
-                        """
-                        INSERT INTO academic_records (
-                            student_id, session_date, session_number, attendance, grade, topic, observation, created_at
-                        ) VALUES (
-                            :student_id, :session_date, :session_number, :attendance, :grade, :topic, :observation, :created_at
-                        )
-                        """,
-                        record,
-                    )
-                json_response(
-                    self,
-                    {"message": "Seguimiento academico registrado.", "record_id": cursor.lastrowid},
-                    HTTPStatus.CREATED,
-                )
+            if parsed.path.startswith("/api/students/") and parsed.path.endswith("/register-sheet"):
+                student_id = int(parsed.path.split("/")[3])
+                save_register_sheet(student_id, payload)
+                json_response(self, {"message": "Hoja de registro guardada correctamente."}, HTTPStatus.CREATED)
                 return
 
             if parsed.path.startswith("/api/students/") and parsed.path.endswith("/notify"):
@@ -665,22 +853,15 @@ class CincelHandler(BaseHTTPRequestHandler):
             if parsed.path.startswith("/api/students/"):
                 student_id = int(parsed.path.split("/")[3])
                 with get_connection() as connection:
-                    connection.execute("DELETE FROM academic_records WHERE student_id = ?", (student_id,))
+                    sheet = connection.execute("SELECT id FROM register_sheets WHERE student_id = ?", (student_id,)).fetchone()
+                    if sheet:
+                        connection.execute("DELETE FROM register_sheet_rows WHERE sheet_id = ?", (sheet["id"],))
+                        connection.execute("DELETE FROM register_sheets WHERE id = ?", (sheet["id"],))
                     result = connection.execute("DELETE FROM students WHERE id = ?", (student_id,))
                 if result.rowcount == 0:
                     json_response(self, {"error": "Estudiante no encontrado."}, HTTPStatus.NOT_FOUND)
                     return
-                json_response(self, {"message": "Estudiante y seguimiento eliminados correctamente."})
-                return
-
-            if parsed.path.startswith("/api/records/"):
-                record_id = int(parsed.path.split("/")[3])
-                with get_connection() as connection:
-                    result = connection.execute("DELETE FROM academic_records WHERE id = ?", (record_id,))
-                if result.rowcount == 0:
-                    json_response(self, {"error": "Registro no encontrado."}, HTTPStatus.NOT_FOUND)
-                    return
-                json_response(self, {"message": "Registro eliminado correctamente."})
+                json_response(self, {"message": "Estudiante y hoja de registro eliminados correctamente."})
                 return
 
             json_response(self, {"error": "Ruta no encontrada."}, HTTPStatus.NOT_FOUND)
